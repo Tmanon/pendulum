@@ -1,128 +1,53 @@
-#![allow(clippy::unnecessary_cast)]
-
-use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
-use bevy_xpbd_2d::{math::*, prelude::*};
+use bevy::prelude::*;
+use bevy_xpbd_2d::math::*;
+use bevy_xpbd_2d::prelude::*;
 
 fn main() {
     App::new()
-        .add_plugins((DefaultPlugins))
-        .insert_resource(ClearColor(Color::rgb(0.05, 0.05, 0.1)))
-        .insert_resource(SubstepCount(6))
+        .add_plugins((
+            DefaultPlugins,
+            PhysicsPlugins::default(),
+            PhysicsDebugPlugin::default(),
+        ))
         .insert_resource(Gravity(Vector::NEG_Y * 1000.0))
         .add_systems(Startup, setup)
         .add_systems(Update, movement)
+        .add_systems(Update, bevy::window::close_on_esc)
         .run();
 }
 
 #[derive(Component)]
-struct Marble;
+struct Pendulum;
 
-fn setup(
-    mut commands: Commands,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-) {
+fn setup(mut commands: Commands) {
     commands.spawn(Camera2dBundle::default());
-
-    let square_sprite = Sprite {
-        color: Color::rgb(0.7, 0.7, 0.8),
-        custom_size: Some(Vec2::splat(50.0)),
-        ..default()
-    };
-
-    // Ceiling
-    commands.spawn((
-        SpriteBundle {
-            sprite: square_sprite.clone(),
-            transform: Transform::from_xyz(0.0, 50.0 * 6.0, 0.0)
-                .with_scale(Vec3::new(20.0, 1.0, 1.0)),
-            ..default()
-        },
-        RigidBody::Static,
-        Collider::cuboid(50.0, 50.0),
-    ));
-    // Floor
-    commands.spawn((
-        SpriteBundle {
-            sprite: square_sprite.clone(),
-            transform: Transform::from_xyz(0.0, -50.0 * 6.0, 0.0)
-                .with_scale(Vec3::new(20.0, 1.0, 1.0)),
-            ..default()
-        },
-        RigidBody::Static,
-        Collider::cuboid(50.0, 50.0),
-    ));
-    // Left wall
-    commands.spawn((
-        SpriteBundle {
-            sprite: square_sprite.clone(),
-            transform: Transform::from_xyz(-50.0 * 9.5, 0.0, 0.0)
-                .with_scale(Vec3::new(1.0, 11.0, 1.0)),
-            ..default()
-        },
-        RigidBody::Static,
-        Collider::cuboid(50.0, 50.0),
-    ));
-    // Right wall
-    commands.spawn((
-        SpriteBundle {
-            sprite: square_sprite,
-            transform: Transform::from_xyz(50.0 * 9.5, 0.0, 0.0)
-                .with_scale(Vec3::new(1.0, 11.0, 1.0)),
-            ..default()
-        },
-        RigidBody::Static,
-        Collider::cuboid(50.0, 50.0),
-    ));
-
-    let marble_radius = 5.0;
-    let marble_mesh = meshes.add(shape::Circle::new(marble_radius).into());
-    let marble_material = materials.add(ColorMaterial::from(Color::rgb(0.2, 0.7, 0.9)));
-
-    // Spawn stacks of marbles
-    for x in -20..20 {
-        for y in -20..20 {
-            commands.spawn((
-                MaterialMesh2dBundle {
-                    mesh: marble_mesh.clone().into(),
-                    material: marble_material.clone(),
-                    transform: Transform::from_xyz(
-                        x as f32 * 2.5 * marble_radius,
-                        y as f32 * 2.5 * marble_radius,
-                        0.0,
-                    ),
-                    ..default()
-                },
-                RigidBody::Dynamic,
-                Collider::ball(marble_radius as Scalar),
-                Marble,
-            ));
-        }
-    }
+    let anchor = commands.spawn(RigidBody::Kinematic).id();
+    let object = commands
+        .spawn((
+            Pendulum,
+            RigidBody::Dynamic,
+            Collider::cuboid(5., 100.),
+            DebugRender::default(),
+            ExternalForce::new(Vec2::ZERO).with_persistence(false),
+        ))
+        .id();
+    commands.spawn(
+        RevoluteJoint::new(anchor, object).with_local_anchor_2(Vector::Y * 50.0), //.with_angle_limits(-1.0, 1.0),
+    );
 }
 
 fn movement(
-    time: Res<Time>,
     keyboard_input: Res<Input<KeyCode>>,
-    mut marbles: Query<&mut LinearVelocity, With<Marble>>,
+    mut pendulum: Query<(&mut ExternalForce, &Rotation), With<Pendulum>>,
 ) {
-    // Precision is adjusted so that the example works with
-    // both the `f32` and `f64` features. Otherwise you don't need this.
-    let delta_time = time.delta_seconds_f64().adjust_precision();
-
-    for mut linear_velocity in &mut marbles {
-        if keyboard_input.any_pressed([KeyCode::W, KeyCode::Up]) {
-            // Use a higher acceleration for upwards movement to overcome gravity
-            linear_velocity.y += 2500.0 * delta_time;
-        }
-        if keyboard_input.any_pressed([KeyCode::S, KeyCode::Down]) {
-            linear_velocity.y -= 500.0 * delta_time;
+    for (mut external_force, rotation) in &mut pendulum {
+        if keyboard_input.any_pressed([KeyCode::D, KeyCode::Right]) {
+            external_force.x = rotation.cos() * 1000000.;
+            external_force.y = rotation.sin() * 1000000.;
         }
         if keyboard_input.any_pressed([KeyCode::A, KeyCode::Left]) {
-            linear_velocity.x -= 500.0 * delta_time;
-        }
-        if keyboard_input.any_pressed([KeyCode::D, KeyCode::Right]) {
-            linear_velocity.x += 500.0 * delta_time;
+            external_force.x = rotation.cos() * -1000000.;
+            external_force.y = rotation.sin() * -1000000.;
         }
     }
 }
