@@ -65,25 +65,21 @@ fn movement(
     mut pendulum: Query<(&mut ExternalForce, &Rotation), With<Pendulum>>,
     mut gizmos: Gizmos,
     mut query_text: Query<&mut Text>,
-    time: Res<Time>,
     mut angle: ResMut<Angle>,
 ) {
     for (mut external_force, rotation) in &mut pendulum {
         let side = if rotation.as_degrees() >= 0. { 1. } else { -1. };
         let current_angle = side * (180. - rotation.as_degrees().abs());
-        let time_step = 1. / 20.;
-        if time.elapsed_seconds() - angle.last_time >= time_step {
-            angle.acceleration = angle.velocity - angle.last_velocity;
-            angle.last_velocity = angle.velocity;
-            angle.velocity = current_angle - angle.last_angle;
-            angle.last_angle = current_angle;
-        }
+        angle.acceleration = angle.velocity - angle.last_velocity;
+        angle.last_velocity = angle.velocity;
+        angle.velocity = current_angle - angle.last_angle;
+        angle.last_angle = current_angle;
         let velocity_sign = if angle.velocity >= 0. { 1. } else { -1. };
         let acceleration_sign = if angle.acceleration >= 0. { 1. } else { -1. };
 
-        const P_GAIN: f32 = 1. * 25000.;
-        const I_GAIN: f32 = 1. * 200000.;
-        const D_GAIN: f32 = 1. * 2000000.;
+        const P_GAIN: f32 = 1. * 250000.;
+        const I_GAIN: f32 = 1. * 1300000.;
+        const D_GAIN: f32 = 0. * 2000000.;
         let proportional = P_GAIN * current_angle;
         let integral = I_GAIN * angle.velocity;
         let derivative = D_GAIN * angle.acceleration;
